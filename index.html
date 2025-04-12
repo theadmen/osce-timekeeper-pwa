@@ -266,13 +266,29 @@
 
     // Fetch student list and metadata on load
     window.onload = function() {
-      // Fetch student list
+      console.log('Window loaded, starting initialization...');
+
+      // Hardcode initial values to test the Proceed button
+      studentList = [
+        { serial: "001", id: "ST001", name: "Test Student 1" },
+        { serial: "002", id: "ST002", name: "Test Student 2" }
+      ];
+      totalStudents = studentList.length;
+      document.getElementById('N').value = totalStudents;
+      document.getElementById('C').value = 3;
+      document.getElementById('S').value = 5;
+
+      console.log('Hardcoded studentList:', studentList);
+      console.log('Set N:', totalStudents, 'C:', 3, 'S:', 5);
+
+      // Fetch student list (commented out for now to isolate the issue)
+      /*
       fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?timekeeper=true', {
         method: 'GET'
       })
       .then(response => response.text())
       .then(html => {
-        // Extract studentListJSON from the HTML response
+        console.log('Fetched student list HTML');
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const scriptTags = doc.getElementsByTagName('script');
@@ -297,13 +313,16 @@
         document.getElementById('N').value = totalStudents;
       })
       .catch(err => console.error('Error fetching student list:', err));
+      */
 
-      // Fetch metadata
+      // Fetch metadata (commented out for now to isolate the issue)
+      /*
       fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=getWebAppMetadata', {
         method: 'GET'
       })
       .then(response => response.text())
       .then(metadata => {
+        console.log('Fetched metadata');
         let metas = JSON.parse(metadata || '[]');
         let circuits = new Set();
         let maxStations = 0;
@@ -315,18 +334,28 @@
         document.getElementById('S').value = maxStations || 5;
       })
       .catch(err => console.error('Error fetching metadata:', err));
+      */
 
       updateNextStudents(1);
     };
 
     function startSetup() {
+      console.log('Proceed button clicked, running startSetup()');
       const stationTime = parseInt(document.getElementById('stationTime').value);
       const transitionTime = parseInt(document.getElementById('transitionTime').value);
+      console.log('Station Time:', stationTime, 'Transition Time:', transitionTime);
       if (isNaN(stationTime) || isNaN(transitionTime) || stationTime <= 0 || transitionTime <= 0) {
+        console.log('Invalid input, showing alert');
         alert('Please enter positive numbers for station and transition times.');
         return;
       }
-      document.getElementById('mainContent').style.display = 'block';
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent) {
+        console.log('Setting mainContent display to block');
+        mainContent.style.display = 'block';
+      } else {
+        console.error('mainContent element not found');
+      }
     }
 
     function markAbsent() {
