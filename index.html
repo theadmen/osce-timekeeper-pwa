@@ -268,7 +268,7 @@
     window.onload = function() {
       console.log('Window loaded, starting initialization...');
 
-      // Hardcode initial values to test the Proceed button
+      // Default values in case fetch fails
       studentList = [
         { serial: "001", id: "ST001", name: "Test Student 1" },
         { serial: "002", id: "ST002", name: "Test Student 2" }
@@ -278,11 +278,10 @@
       document.getElementById('C').value = 3;
       document.getElementById('S').value = 5;
 
-      console.log('Hardcoded studentList:', studentList);
+      console.log('Default studentList:', studentList);
       console.log('Set N:', totalStudents, 'C:', 3, 'S:', 5);
 
-      // Fetch student list (commented out for now to isolate the issue)
-      /*
+      // Fetch student list
       fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?timekeeper=true', {
         method: 'GET'
       })
@@ -304,19 +303,20 @@
         }
         try {
           studentList = JSON.parse(studentListJSON);
+          totalStudents = studentList.length;
+          document.getElementById('N').value = totalStudents;
+          console.log('Updated studentList:', studentList);
+          console.log('Updated N:', totalStudents);
         } catch (e) {
           console.error('Error parsing studentListJSON:', e);
-          studentList = [];
         }
-        console.log('studentList:', studentList);
-        totalStudents = studentList.length;
-        document.getElementById('N').value = totalStudents;
       })
-      .catch(err => console.error('Error fetching student list:', err));
-      */
+      .catch(err => {
+        console.error('Error fetching student list:', err);
+        // Continue with default values
+      });
 
-      // Fetch metadata (commented out for now to isolate the issue)
-      /*
+      // Fetch metadata
       fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=getWebAppMetadata', {
         method: 'GET'
       })
@@ -332,9 +332,12 @@
         });
         document.getElementById('C').value = circuits.size || 3;
         document.getElementById('S').value = maxStations || 5;
+        console.log('Updated C:', circuits.size || 3, 'S:', maxStations || 5);
       })
-      .catch(err => console.error('Error fetching metadata:', err));
-      */
+      .catch(err => {
+        console.error('Error fetching metadata:', err);
+        // Continue with default values
+      });
 
       updateNextStudents(1);
     };
@@ -411,13 +414,17 @@
     }
 
     function calculateSchedule() {
+      console.log('Calculating schedule...');
       const N_total = parseInt(document.getElementById('N').value);
       const C = parseInt(document.getElementById('C').value);
       const S = parseInt(document.getElementById('S').value);
       const stationTime = parseInt(document.getElementById('stationTime').value);
       const transitionTime = parseInt(document.getElementById('transitionTime').value);
 
+      console.log('Inputs - N:', N_total, 'C:', C, 'S:', S, 'Station Time:', stationTime, 'Transition Time:', transitionTime);
+
       if (isNaN(N_total) || isNaN(C) || isNaN(S) || N_total <= 0 || C <= 0 || S <= 0) {
+        console.log('Invalid parameters');
         alert('Please enter positive integers for all parameters.');
         return;
       }
@@ -510,6 +517,8 @@
           schedule.push({ round: r, type: 'station', station: s, duration: stationTime });
         }
       }
+
+      console.log('Schedule generated:', schedule);
 
       document.getElementById('roundDuration').innerText = `${roundDuration} minutes`;
       document.getElementById('leftovers').innerText = L;
@@ -626,6 +635,8 @@
         }
       }
 
+      console.log('Schedule after confirmStrategy:', schedule);
+
       document.getElementById('roundDuration').innerText = `${roundDuration} minutes`;
       document.getElementById('leftovers').innerText = L;
 
@@ -656,13 +667,24 @@
     }
 
     function startExam() {
-      if (examStarted) return;
+      console.log('Starting exam...');
+      if (examStarted) {
+        console.log('Exam already started');
+        return;
+      }
       const scheduleStr = localStorage.getItem('schedule');
       if (!scheduleStr) {
+        console.log('No schedule found in localStorage');
         alert('Please calculate the schedule first.');
         return;
       }
       schedule = JSON.parse(scheduleStr);
+      console.log('Loaded schedule:', schedule);
+      if (!schedule || schedule.length === 0) {
+        console.log('Schedule is empty');
+        alert('Schedule is empty. Please calculate the schedule again.');
+        return;
+      }
       examStarted = true;
       startTime = new Date();
       phaseStartTime = startTime; // First phase starts immediately
@@ -682,11 +704,15 @@
     }
 
     function startCountdown() {
+      console.log('Starting countdown with schedule:', schedule);
       timerInterval = setInterval(() => {
         const now = new Date();
         const elapsed = (now - phaseStartTime) / 60000; // Time elapsed since phase start
 
+        console.log('Current phase index:', currentPhaseIndex, 'Schedule length:', schedule.length, 'Elapsed:', elapsed);
+
         if (currentPhaseIndex > schedule.length - 1 || (currentPhaseIndex === schedule.length - 1 && elapsed >= schedule[currentPhaseIndex].duration)) {
+          console.log('Exam finished condition met');
           clearInterval(timerInterval);
           document.getElementById('countdown').innerText = 'Total Time Remaining: 0m 0s';
           document.getElementById('currentSlot').innerText = 'Exam Finished';
@@ -702,6 +728,8 @@
         const currentPhase = schedule[currentPhaseIndex];
         const phaseDuration = currentPhase.duration;
         const phaseRemaining = phaseDuration - elapsed;
+
+        console.log('Current phase:', currentPhase, 'Phase remaining:', phaseRemaining);
 
         if (phaseRemaining > 0) {
           const phaseMinutes = Math.floor(phaseRemaining);
