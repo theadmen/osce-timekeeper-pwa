@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSCE Time Keeper</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      margin: 20px;
+      background-color: #f4f7f9;
+      color: #333;
+      transition: background-color 0.5s;
+    }
+    h1, h2 {
+      color: #2c3e50;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-weight: 700;
+    }
+    h2 {
+      font-weight: 400;
+      margin-top: 20px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    label {
+      display: inline-block;
+      width: 180px;
+      margin: 10px 0;
+      font-weight: 300;
+    }
+    input[type="number"], input[type="text"] {
+      width: 120px;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    #warning, #restStationNotice {
+      color: #e74c3c;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    #countdown, #currentSlot, #nextStudents, #finishTime {
+      margin: 15px 0;
+      font-size: 18px;
+      font-weight: 300;
+    }
+    #absentList {
+      margin-top: 10px;
+    }
+    #absentList span {
+      display: inline-block;
+      margin-right: 10px;
+      background-color: #ecf0f1;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #absentList button {
+      background-color: #e74c3c;
+      color: white;
+      padding: 5px 10px;
+      margin-left: 5px;
+    }
+    #absentList button:hover {
+      background-color: #c0392b;
+    }
+    .analysis p {
+      margin: 5px 0;
+      font-size: 16px;
+    }
+    .analysis span {
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    progress {
+      width: 100%;
+      height: 20px;
+      margin: 10px 0;
+    }
+    #timeSetup {
+      display: block;
+    }
+    #mainContent {
+      display: none;
+    }
+    .station-phase {
+      background-color: #e6ffe6; /* Light green for station */
+    }
+    .transition-phase {
+      background-color: #fff3e6; /* Light yellow for transition */
+    }
+    @media (max-width: 600px) {
+      .container {
+        padding: 10px;
+      }
+      label {
+        width: 100%;
+      }
+      input[type="number"], input[type="text"] {
+        width: 100%;
+      }
+      button {
+        width: 100%;
+      }
+      #absentList span {
+        display: block;
+        margin-bottom: 10px;
+      }
+    }
+    /* Table styles for next round students */
+    #nextStudentsTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    #nextStudentsTable th, #nextStudentsTable td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    #nextStudentsTable th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+    }
+    /* Radio button styles for strategy choice */
+    .strategy-choice {
+      margin-top: 10px;
+    }
+    .strategy-choice label {
+      display: block;
+      margin: 5px 0;
+    }
+  </style>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#3498db">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('Service Worker registered'))
+        .catch(err => console.log('Service Worker registration failed:', err));
+    });
+  }
+</script>
+</head>
+<body>
+  <div class="container">
+    <h1>OSCE Time Keeper</h1>
+
+    <!-- Time Setup Section -->
+    <div id="timeSetup">
+      <h2>Setup Exam Timing</h2>
+      <label>Station Time (minutes):</label> <input type="number" id="stationTime" min="1" value="6"><br>
+      <label>Transition Time (minutes):</label> <input type="number" id="transitionTime" min="1" value="2"><br>
+      <button onclick="startSetup()">Proceed</button>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent">
+      <!-- Absent Students Section -->
+      <h2>Manage Absent Students</h2>
+      <label>Enter Student Serial or ID:</label>
+      <input type="text" id="absentInput" placeholder="Enter Serial or ID">
+      <button onclick="markAbsent()">Mark as Absent</button>
+      <div id="absentList"></div>
+
+      <!-- Parameter Input Section -->
+      <h2>Parameter Input</h2>
+      <label>Total Students (N):</label> <input type="number" id="N" min="1"><br>
+      <label>Circuits (C):</label> <input type="number" id="C" min="1"><br>
+      <label>Stations per Circuit (S):</label> <input type="number" id="S" min="1"><br>
+      <button onclick="calculateSchedule()">Calculate Schedule</button>
+
+      <!-- Exam Analysis Section -->
+      <h2>Exam Analysis</h2>
+      <div class="analysis">
+        <p>Full Round Duration: <span id="roundDuration"></span></p>
+        <p id="roundsInfo"></p>
+        <p>Leftover Students: <span id="leftovers"></span></p>
+        <p id="strategyLabel"></p>
+        <p><span id="extraRoundInfo"></span></p>
+        <div id="strategyChoice" class="strategy-choice" style="display:none;">
+          <p>Both strategies take the same time. Please choose one:</p>
+          <label><input type="radio" name="strategy" value="restStations"> Use Rest Stations</label>
+          <label><input type="radio" name="strategy" value="extraRound"> Use Extra Round</label>
+          <button onclick="confirmStrategy()">Confirm Choice</button>
+        </div>
+      </div>
+
+      <button onclick="startExam()" id="startButton" disabled>Start Exam</button>
+
+      <!-- Live Timer Section -->
+      <h2>Live Timer</h2>
+      <div id="countdown"></div>
+      <div id="finishTime"></div>
+      <div id="currentSlot"></div>
+      <div id="warning"></div>
+      <audio id="audio" src="https://www.soundjay.com/buttons/beep-01a.mp3" preload="auto"></audio>
+      <audio id="zeroSound" src="https://www.soundjay.com/buttons/beep-02.mp3" preload="auto"></audio>
+      <button onclick="nextPhase()" id="nextButton" style="display:none;">Next Phase</button>
+      <button onclick="finishRound()" id="finishRoundButton" style="display:none;">Finish Entire Round</button>
+      <p>Current Round Progress: <progress id="roundProgress" value="0" max="100"></progress></p>
+      <p>Overall Exam Progress: <progress id="examProgress" value="0" max="100"></progress></p>
+
+      <!-- Next Round Students Section -->
+      <h2>Next Round Students</h2>
+      <table id="nextStudentsTable">
+        <thead>
+          <tr>
+            <th>Serial</th>
+            <th>ID</th>
+            <th>Name</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let schedule = [];
+    let timerInterval = null;
+    let examStarted = false;
+    let absentStudents = [];
+    let startTime = null;
+    let totalTime = 0; // Initial total time for reference
+    let currentPhaseIndex = 0;
+    let phaseStartTime = null;
+    let warningPlayed = false;
+    let zeroPlayed = false;
+    let phaseEnded = false;
+
+    let studentListJSON = '<?!= studentListJSON ? studentListJSON : "[]" ?>';
+    let studentList;
+    try {
+      studentList = JSON.parse(studentListJSON);
+    } catch (e) {
+      console.error('Error parsing studentListJSON:', e);
+      studentList = [];
+    }
+    console.log('studentList:', studentList);
+    let totalStudents = studentList.length;
+    document.getElementById('N').value = totalStudents;
+
+    window.onload = function() {
+      fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=getWebAppMetadata', {
+  method: 'GET'
+})
+.then(response => response.text())
+.then(metadata => {
+  let metas = JSON.parse(metadata || '[]');
+  let circuits = new Set();
+  let maxStations = 0;
+  metas.filter(m => m.circuit && m.stationNumber).forEach(m => {
+    circuits.add(m.circuit);
+    maxStations = Math.max(maxStations, parseInt(m.stationNumber));
+  });
+  document.getElementById('C').value = circuits.size || 3;
+  document.getElementById('S').value = maxStations || 5;
+})
+.catch(err => console.error('Error fetching metadata:', err));
+
+      updateNextStudents(1);
+    };
+
+    function startSetup() {
+      const stationTime = parseInt(document.getElementById('stationTime').value);
+      const transitionTime = parseInt(document.getElementById('transitionTime').value);
+      if (isNaN(stationTime) || isNaN(transitionTime) || stationTime <= 0 || transitionTime <= 0) {
+        alert('Please enter positive numbers for station and transition times.');
+        return;
+      }
+      document.getElementById('mainContent').style.display = 'block';
+    }
+
+    function markAbsent() {
+      const query = document.getElementById("absentInput").value.trim();
+      if (!query) {
+        alert("Please enter a student serial or ID.");
+        return;
+      }
+      const match = studentList.find(s => s.serial === query || s.id === query);
+      if (match) {
+        if (!absentStudents.some(a => a.id === match.id)) {
+          absentStudents.push(match);
+          updateAbsentList();
+          document.getElementById('N').value = totalStudents - absentStudents.length;
+          if (examStarted) {
+            const currentRound = schedule[currentPhaseIndex].round;
+            updateNextStudents(currentRound + 1);
+          } else {
+            updateNextStudents(1);
+          }
+        }
+        document.getElementById("absentInput").value = "";
+      } else {
+        alert("Student not found. Please check the serial or ID.");
+      }
+    }
+
+    function markPresent(id) {
+      absentStudents = absentStudents.filter(a => a.id !== id);
+      updateAbsentList();
+      document.getElementById('N').value = totalStudents - absentStudents.length;
+      if (examStarted) {
+        const currentRound = schedule[currentPhaseIndex].round;
+        updateNextStudents(currentRound + 1);
+      } else {
+        updateNextStudents(1);
+      }
+    }
+
+    function updateAbsentList() {
+      const listDiv = document.getElementById("absentList");
+      listDiv.innerHTML = "";
+      absentStudents.forEach(student => {
+        const span = document.createElement("span");
+        span.textContent = `${student.name} (${student.id})`;
+        const button = document.createElement("button");
+        button.textContent = "Mark Present";
+        button.onclick = () => markPresent(student.id);
+        listDiv.appendChild(span);
+        listDiv.appendChild(button);
+        listDiv.appendChild(document.createElement("br"));
+      });
+    }
+
+    function calculateSchedule() {
+      const N_total = parseInt(document.getElementById('N').value);
+      const C = parseInt(document.getElementById('C').value);
+      const S = parseInt(document.getElementById('S').value);
+      const stationTime = parseInt(document.getElementById('stationTime').value);
+      const transitionTime = parseInt(document.getElementById('transitionTime').value);
+
+      if (isNaN(N_total) || isNaN(C) || isNaN(S) || N_total <= 0 || C <= 0 || S <= 0) {
+        alert('Please enter positive integers for all parameters.');
+        return;
+      }
+
+      const studentsPerRound = C * S;
+      const R = Math.floor(N_total / studentsPerRound);
+      const L = N_total % studentsPerRound;
+      const roundDuration = S * (transitionTime + stationTime);
+      const extendedRoundDuration = (S + 1) * (transitionTime + stationTime);
+
+      const k = L > 0 ? Math.ceil(L / C) : 0;
+      const totalRoundsExtra = R + (L > 0 ? 1 : 0);
+      const totalTimeExtra = totalRoundsExtra * roundDuration;
+      let totalTimeRest = 0;
+      if (L > 0) {
+        totalTimeRest = (R - k) * roundDuration + k * extendedRoundDuration;
+      } else {
+        totalTimeRest = R * roundDuration;
+      }
+
+      let useRestStations = false;
+      let totalRounds = totalRoundsExtra;
+      totalTime = totalTimeExtra;
+      let restStationsPerRound = {};
+
+      // Distribute rest stations for calculation
+      if (L > 0) {
+        let remainingRestStations = L;
+        for (let r = R; r >= R - k + 1 && remainingRestStations > 0; r--) {
+          const restStationsThisRound = Math.min(C, remainingRestStations);
+          restStationsPerRound[r] = restStationsThisRound;
+          remainingRestStations -= restStationsThisRound;
+        }
+      }
+
+      if (L > 0 && totalTimeRest < totalTimeExtra) {
+        useRestStations = true;
+        totalRounds = R;
+        totalTime = totalTimeRest;
+      } else if (L > 0 && totalTimeRest === totalTimeExtra) {
+        // Show choice to user
+        document.getElementById('strategyChoice').style.display = 'block';
+        document.getElementById('strategyLabel').innerText = 'Strategy Options:';
+        let restStationsMessage = `Rest Stations Strategy: To handle ${L} leftover student${L > 1 ? 's' : ''}:\n`;
+        for (let r = R - k + 1; r <= R; r++) {
+          if (restStationsPerRound[r]) {
+            restStationsMessage += `Round ${r}: add ${restStationsPerRound[r]} rest station${restStationsPerRound[r] > 1 ? 's' : ''} across ${restStationsPerRound[r]} circuit${restStationsPerRound[r] > 1 ? 's' : ''}\n`;
+          }
+        }
+        restStationsMessage += `Total exam time: ${totalTimeRest} minutes.`;
+        const extraRoundMessage = `Extra Round Strategy: Create Round ${totalRoundsExtra} with ${L} student${L > 1 ? 's' : ''} (max ${studentsPerRound}). Total exam time: ${totalTimeExtra} minutes.`;
+        document.getElementById('extraRoundInfo').innerText = `${restStationsMessage}\n\n${extraRoundMessage}`;
+        // Wait for user choice via confirmStrategy()
+        return; // Exit until choice is made
+      }
+
+      // Compute capacities for each round
+      let capacities = [];
+      if (useRestStations) {
+        for (let r = 1; r <= R; r++) {
+          if (r > R - k && restStationsPerRound[r]) {
+            capacities.push(studentsPerRound + restStationsPerRound[r]);
+          } else {
+            capacities.push(studentsPerRound);
+          }
+        }
+      } else {
+        for (let r = 1; r <= R; r++) {
+          capacities.push(studentsPerRound);
+        }
+        if (L > 0) {
+          capacities.push(L);
+        }
+      }
+
+      // Compute start indices based on capacities
+      let startIndices = [0];
+      for (let i = 0; i < capacities.length - 1; i++) {
+        startIndices.push(startIndices[i] + capacities[i]);
+      }
+
+      schedule = [];
+      for (let r = 1; r <= totalRounds; r++) {
+        let numStations = S;
+        if (useRestStations && r > R - k && restStationsPerRound[r]) {
+          numStations = S + 1;
+        }
+        for (let s = 1; s <= numStations; s++) {
+          schedule.push({ round: r, type: 'transition', duration: transitionTime });
+          schedule.push({ round: r, type: 'station', station: s, duration: stationTime });
+        }
+      }
+
+      document.getElementById('roundDuration').innerText = `${roundDuration} minutes`;
+      document.getElementById('leftovers').innerText = L;
+
+      if (useRestStations) {
+        document.getElementById('roundsInfo').innerText = `Number of Rounds: ${totalRounds} full rounds (with rest stations)`;
+      } else {
+        document.getElementById('roundsInfo').innerText = `Number of Rounds: ${R} full round${R > 1 ? 's' : ''}${L > 0 ? ` + 1 partially full round` : ''}`;
+      }
+
+      if (useRestStations && L > 0) {
+        document.getElementById('strategyLabel').innerText = 'Rest Station Strategy:';
+        const timeSaved = totalTimeExtra - totalTimeRest;
+        let restStationsMessage = `To handle ${L} leftover student${L > 1 ? 's' : ''}:\n`;
+        for (let r = R - k + 1; r <= R; r++) {
+          if (restStationsPerRound[r]) {
+            restStationsMessage += `Round ${r}: add ${restStationsPerRound[r]} rest station${restStationsPerRound[r] > 1 ? 's' : ''} across ${restStationsPerRound[r]} circuit${restStationsPerRound[r] > 1 ? 's' : ''}\n`;
+          }
+        }
+        restStationsMessage += `This results in a total exam time of ${totalTime} minutes, saving ${timeSaved} minute${timeSaved > 1 ? 's' : ''} compared to ${totalTimeExtra} minutes with an extra round.`;
+        document.getElementById('extraRoundInfo').innerText = restStationsMessage;
+      } else {
+        document.getElementById('strategyLabel').innerText = 'Extra Round Strategy:';
+        if (L > 0) {
+          const extraRoundMessage = `Creating an extra round (Round ${totalRounds}) with ${L} student${L > 1 ? 's' : ''} (out of a maximum of ${studentsPerRound}) results in a total exam time of ${totalTime} minutes. ` +
+            `This is faster than adding rest stations, which would take ${totalTimeRest} minutes. We recommend using an extra round.`;
+          document.getElementById('extraRoundInfo').innerText = extraRoundMessage;
+        } else {
+          document.getElementById('extraRoundInfo').innerText = `Total exam time: ${totalTime} minutes.`;
+        }
+      }
+
+      localStorage.setItem('schedule', JSON.stringify(schedule));
+      localStorage.setItem('examParams', JSON.stringify({ N_total, C, S, stationTime, transitionTime, useRestStations, k, restStationsPerRound, capacities, startIndices, totalRounds }));
+      document.getElementById('startButton').disabled = false;
+
+      updateNextStudents(1);
+    }
+
+    function confirmStrategy() {
+      const N_total = parseInt(document.getElementById('N').value);
+      const C = parseInt(document.getElementById('C').value);
+      const S = parseInt(document.getElementById('S').value);
+      const stationTime = parseInt(document.getElementById('stationTime').value);
+      const transitionTime = parseInt(document.getElementById('transitionTime').value);
+
+      const studentsPerRound = C * S;
+      const R = Math.floor(N_total / studentsPerRound);
+      const L = N_total % studentsPerRound;
+      const roundDuration = S * (transitionTime + stationTime);
+      const extendedRoundDuration = (S + 1) * (transitionTime + stationTime);
+      const k = L > 0 ? Math.ceil(L / C) : 0;
+      const totalRoundsExtra = R + (L > 0 ? 1 : 0);
+      const totalTimeExtra = totalRoundsExtra * roundDuration;
+      const totalTimeRest = (R - k) * roundDuration + k * extendedRoundDuration;
+
+      let useRestStations = false;
+      let totalRounds = totalRoundsExtra;
+      totalTime = totalTimeExtra;
+      let restStationsPerRound = {};
+
+      if (L > 0) {
+        let remainingRestStations = L;
+        for (let r = R; r >= R - k + 1 && remainingRestStations > 0; r--) {
+          const restStationsThisRound = Math.min(C, remainingRestStations);
+          restStationsPerRound[r] = restStationsThisRound;
+          remainingRestStations -= restStationsThisRound;
+        }
+      }
+
+      const strategy = document.querySelector('input[name="strategy"]:checked');
+      if (!strategy) {
+        alert('Please select a strategy.');
+        return;
+      }
+      if (strategy.value === 'restStations') {
+        useRestStations = true;
+        totalRounds = R;
+        totalTime = totalTimeRest;
+      }
+
+      let capacities = [];
+      if (useRestStations) {
+        for (let r = 1; r <= R; r++) {
+          if (r > R - k && restStationsPerRound[r]) {
+            capacities.push(studentsPerRound + restStationsPerRound[r]);
+          } else {
+            capacities.push(studentsPerRound);
+          }
+        }
+      } else {
+        for (let r = 1; r <= R; r++) {
+          capacities.push(studentsPerRound);
+        }
+        if (L > 0) {
+          capacities.push(L);
+        }
+      }
+
+      let startIndices = [0];
+      for (let i = 0; i < capacities.length - 1; i++) {
+        startIndices.push(startIndices[i] + capacities[i]);
+      }
+
+      schedule = [];
+      for (let r = 1; r <= totalRounds; r++) {
+        let numStations = S;
+        if (useRestStations && r > R - k && restStationsPerRound[r]) {
+          numStations = S + 1;
+        }
+        for (let s = 1; s <= numStations; s++) {
+          schedule.push({ round: r, type: 'transition', duration: transitionTime });
+          schedule.push({ round: r, type: 'station', station: s, duration: stationTime });
+        }
+      }
+
+      document.getElementById('roundDuration').innerText = `${roundDuration} minutes`;
+      document.getElementById('leftovers').innerText = L;
+
+      if (useRestStations) {
+        document.getElementById('roundsInfo').innerText = `Number of Rounds: ${totalRounds} full rounds (with rest stations)`;
+        document.getElementById('strategyLabel').innerText = 'Rest Station Strategy:';
+        let restStationsMessage = `To handle ${L} leftover student${L > 1 ? 's' : ''}:\n`;
+        for (let r = R - k + 1; r <= R; r++) {
+          if (restStationsPerRound[r]) {
+            restStationsMessage += `Round ${r}: add ${restStationsPerRound[r]} rest station${restStationsPerRound[r] > 1 ? 's' : ''} across ${restStationsPerRound[r]} circuit${restStationsPerRound[r] > 1 ? 's' : ''}\n`;
+          }
+        }
+        restStationsMessage += `Total exam time: ${totalTime} minutes.`;
+        document.getElementById('extraRoundInfo').innerText = restStationsMessage;
+      } else {
+        document.getElementById('roundsInfo').innerText = `Number of Rounds: ${R} full round${R > 1 ? 's' : ''}${L > 0 ? ` + 1 partially full round` : ''}`;
+        document.getElementById('strategyLabel').innerText = 'Extra Round Strategy:';
+        const extraRoundMessage = `Creating an extra round (Round ${totalRounds}) with ${L} student${L > 1 ? 's' : ''} (out of a maximum of ${studentsPerRound}) results in a total exam time of ${totalTime} minutes.`;
+        document.getElementById('extraRoundInfo').innerText = extraRoundMessage;
+      }
+
+      localStorage.setItem('schedule', JSON.stringify(schedule));
+      localStorage.setItem('examParams', JSON.stringify({ N_total, C, S, stationTime, transitionTime, useRestStations, k, restStationsPerRound, capacities, startIndices, totalRounds }));
+      document.getElementById('startButton').disabled = false;
+      document.getElementById('strategyChoice').style.display = 'none';
+
+      updateNextStudents(1);
+    }
+
+    function startExam() {
+      if (examStarted) return;
+      const scheduleStr = localStorage.getItem('schedule');
+      if (!scheduleStr) {
+        alert('Please calculate the schedule first.');
+        return;
+      }
+      schedule = JSON.parse(scheduleStr);
+      examStarted = true;
+      startTime = new Date();
+      phaseStartTime = startTime; // First phase starts immediately
+      currentPhaseIndex = 0;
+      warningPlayed = false;
+      zeroPlayed = false;
+      phaseEnded = false;
+      startCountdown();
+      document.getElementById('startButton').disabled = true;
+      document.getElementById('nextButton').style.display = 'inline-block';
+      document.getElementById('finishRoundButton').style.display = 'inline-block';
+      document.getElementById('stationTime').disabled = true;
+      document.getElementById('transitionTime').disabled = true;
+      document.getElementById('N').disabled = true;
+      document.getElementById('C').disabled = true;
+      document.getElementById('S').disabled = true;
+    }
+
+    function startCountdown() {
+      timerInterval = setInterval(() => {
+        const now = new Date();
+        const elapsed = (now - phaseStartTime) / 60000; // Time elapsed since phase start
+
+        if (currentPhaseIndex > schedule.length - 1 || (currentPhaseIndex === schedule.length - 1 && elapsed >= schedule[currentPhaseIndex].duration)) {
+          clearInterval(timerInterval);
+          document.getElementById('countdown').innerText = 'Total Time Remaining: 0m 0s';
+          document.getElementById('currentSlot').innerText = 'Exam Finished';
+          document.getElementById('finishTime').innerText = '';
+          document.getElementById('nextButton').style.display = 'none';
+          document.getElementById('finishRoundButton').style.display = 'none';
+          document.body.className = '';
+          alert('Exam Finished!');
+          updateNextStudents(-1); // Clear the next round students table
+          return;
+        }
+
+        const currentPhase = schedule[currentPhaseIndex];
+        const phaseDuration = currentPhase.duration;
+        const phaseRemaining = phaseDuration - elapsed;
+
+        if (phaseRemaining > 0) {
+          const phaseMinutes = Math.floor(phaseRemaining);
+          const phaseSeconds = Math.floor((phaseRemaining - phaseMinutes) * 60);
+          let phaseText = `Round ${currentPhase.round}, ${currentPhase.type === 'station' ? `Station ${currentPhase.station}` : 'Transition'}: ${phaseMinutes}m ${phaseSeconds}s remaining`;
+          document.getElementById('currentSlot').innerText = phaseText;
+          document.body.className = currentPhase.type === 'station' ? 'station-phase' : 'transition-phase';
+
+            // Update server with timer state when in station phase (not during transitions)
+if (currentPhase.type === 'station') {
+  const stationTime = parseInt(document.getElementById('stationTime').value);
+  const timerState = {
+    phaseStartTime: phaseStartTime.getTime(),
+    phaseDuration: phaseDuration,
+    currentPhaseType: currentPhase.type,
+    currentRound: currentPhase.round,
+    currentStation: currentPhase.station,
+    stationLength: stationTime, // Add the station length from the TimeKeeper
+    source: 'timekeeper'
+  };
+  fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=setTimerState', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(timerState)
+})
+.then(response => response.json())
+.catch(err => console.error('Error setting timer state:', err));
+}
+
+
+
+          if (currentPhase.type === 'station' && phaseRemaining <= 2 && phaseRemaining > 1.99 && !warningPlayed) {
+  document.getElementById('warning').innerText = 'Warning: Only 2 minutes remaining in the current station!';
+  if (Notification.permission === 'granted') {
+    new Notification('OSCE Time Keeper', {
+      body: '2 minutes remaining in Station ' + currentPhase.station,
+      icon: '/icon.png'
+    });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        new Notification('OSCE Time Keeper', {
+          body: '2 minutes remaining in Station ' + currentPhase.station,
+          icon: '/icon.png'
+        });
+      }
+    });
+  }
+  warningPlayed = true;
+}
+          } else if (phaseRemaining > 2) {
+            document.getElementById('warning').innerText = '';
+            warningPlayed = false;
+          }
+          phaseEnded = false;
+        } else {
+          document.getElementById('currentSlot').innerText = `Round ${currentPhase.round}, ${currentPhase.type === 'station' ? `Station ${currentPhase.station}` : 'Transition'}: Time's up! Click 'Next Phase' to proceed.`;
+          document.body.className = '';
+          if (!zeroPlayed) {
+  if (Notification.permission === 'granted') {
+    new Notification('OSCE Time Keeper', {
+      body: 'Time is up for Station ' + currentPhase.station + '!',
+      icon: '/icon.png'
+    });
+  }
+  zeroPlayed = true;
+}
+          phaseEnded = true;
+        }
+
+        // Calculate total remaining time dynamically
+        let remainingPhasesTime = 0;
+        for (let i = currentPhaseIndex + 1; i < schedule.length; i++) {
+          remainingPhasesTime += schedule[i].duration;
+        }
+        let totalRemainingTime = phaseRemaining > 0 ? phaseRemaining + remainingPhasesTime : remainingPhasesTime;
+        const totalMinutes = Math.floor(totalRemainingTime);
+        const totalSeconds = Math.floor((totalRemainingTime - totalMinutes) * 60);
+        document.getElementById('countdown').innerText = `Total Time Remaining: ${totalMinutes}m ${totalSeconds}s`;
+
+        // Update estimated finish time dynamically
+        const finishTime = new Date(now.getTime() + totalRemainingTime * 60000);
+        document.getElementById('finishTime').innerText = `Estimated Finish Time: ${finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+        // Calculate Round Progress
+        const currentRound = currentPhase.round;
+        const roundPhases = schedule.filter(p => p.round === currentRound);
+        const roundTotalTime = roundPhases.reduce((acc, phase) => acc + phase.duration, 0);
+        const phasesBefore = roundPhases.slice(0, currentPhaseIndex % roundPhases.length);
+        const completedRoundTime = phasesBefore.reduce((acc, phase) => acc + phase.duration, 0);
+        const currentPhaseProgress = phaseRemaining > 0 ? (phaseDuration - phaseRemaining) : phaseDuration;
+        const roundProgress = ((completedRoundTime + currentPhaseProgress) / roundTotalTime) * 100;
+        document.getElementById('roundProgress').value = Math.min(Math.max(roundProgress, 0), 100);
+
+        // Calculate Overall Exam Progress
+        const totalExamTime = schedule.reduce((acc, phase) => acc + phase.duration, 0);
+        const phasesBeforeCurrent = schedule.slice(0, currentPhaseIndex);
+        const completedExamTime = phasesBeforeCurrent.reduce((acc, phase) => acc + phase.duration, 0);
+        const overallProgress = ((completedExamTime + currentPhaseProgress) / totalExamTime) * 100;
+        document.getElementById('examProgress').value = Math.min(Math.max(overallProgress, 0), 100);
+
+        // Update next round students only if there is a next round
+        const nextRound = currentPhase.round + 1;
+        const params = JSON.parse(localStorage.getItem('examParams'));
+        const totalRounds = params.totalRounds;
+        if (nextRound <= totalRounds) {
+          updateNextStudents(nextRound);
+        } else {
+          updateNextStudents(-1); // Clear the table
+        }
+      }, 1000);
+    }
+
+    function updateNextStudents(round) {
+      if (!localStorage.getItem('examParams')) return;
+      const params = JSON.parse(localStorage.getItem('examParams'));
+      const { N_total, C, S, useRestStations, k, restStationsPerRound, capacities, startIndices, totalRounds } = params;
+      const studentsPerRoundNormal = C * S;
+
+      const tableBody = document.getElementById('nextStudentsTable').querySelector('tbody');
+      tableBody.innerHTML = '';
+
+      if (round < 1 || round > totalRounds) {
+        const noteRow = document.createElement('tr');
+        noteRow.innerHTML = `<td colspan="3">No next round (exam complete).</td>`;
+        tableBody.appendChild(noteRow);
+        return;
+      }
+
+      const availableStudents = studentList.filter(s => !absentStudents.some(a => a.id === s.id));
+      const startIdx = startIndices[round - 1];
+      const studentsPerRound = capacities[round - 1];
+      const nextStudents = availableStudents.slice(startIdx, startIdx + studentsPerRound);
+
+      if (nextStudents.length > 0) {
+        const restStationsThisRound = capacities[round - 1] - studentsPerRoundNormal;
+        if (useRestStations && restStationsThisRound > 0) {
+          const noteRow = document.createElement('tr');
+          noteRow.innerHTML = `<td colspan="3">This round has ${restStationsThisRound} rest station${restStationsThisRound > 1 ? 's' : ''} added across ${restStationsThisRound} circuit${restStationsThisRound > 1 ? 's' : ''}, allowing up to ${capacities[round - 1]} students.</td>`;
+          tableBody.appendChild(noteRow);
+        } else if (!useRestStations && round === totalRounds && N_total % studentsPerRoundNormal > 0) {
+          const L = N_total % studentsPerRoundNormal;
+          const noteRow = document.createElement('tr');
+          noteRow.innerHTML = `<td colspan="3">Extra round with ${L} student${L > 1 ? 's' : ''} (out of a maximum of ${studentsPerRoundNormal}).</td>`;
+          tableBody.appendChild(noteRow);
+        }
+        nextStudents.forEach(student => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${student.serial}</td>
+            <td>${student.id}</td>
+            <td>${student.name}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      }
+    }
+
+    function nextPhase() {
+      if (!examStarted || currentPhaseIndex >= schedule.length - 1) return;
+      const now = new Date();
+      const elapsed = (now - phaseStartTime) / 60000;
+      const currentPhase = schedule[currentPhaseIndex];
+      const phaseDuration = currentPhase.duration;
+
+      if (elapsed < phaseDuration) {
+        const confirmSkip = confirm("The current phase hasn't finished. Are you sure you want to proceed?");
+        if (!confirmSkip) return;
+      }
+
+      currentPhaseIndex++;
+      phaseStartTime = new Date();
+      warningPlayed = false;
+      zeroPlayed = false;
+      phaseEnded = false;
+    }
+
+    function finishRound() {
+      if (!examStarted) return;
+      const currentRound = schedule[currentPhaseIndex].round;
+      let nextRoundIndex = currentPhaseIndex;
+      for (let i = currentPhaseIndex; i < schedule.length; i++) {
+        if (schedule[i].round === currentRound) {
+          nextRoundIndex = i + 1;
+        } else {
+          break;
+        }
+      }
+      currentPhaseIndex = nextRoundIndex || schedule.length;
+      if (currentPhaseIndex < schedule.length) {
+        phaseStartTime = new Date();
+      }
+      warningPlayed = false;
+      zeroPlayed = false;
+      phaseEnded = false;
+    }
+  </script>
+</body>
+</html>
