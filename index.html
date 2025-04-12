@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OSCE Time Keeper</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#3498db">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('Service Worker registered'))
+          .catch(err => console.log('Service Worker registration failed:', err));
+      });
+    }
+  </script>
   <style>
     body {
       font-family: 'Roboto', sans-serif;
@@ -162,17 +173,6 @@
       margin: 5px 0;
     }
   </style>
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#3498db">
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('Service Worker registered'))
-        .catch(err => console.log('Service Worker registration failed:', err));
-    });
-  }
-</script>
 </head>
 <body>
   <div class="container">
@@ -261,35 +261,60 @@
     let zeroPlayed = false;
     let phaseEnded = false;
 
-    let studentListJSON = '<?!= studentListJSON ? studentListJSON : "[]" ?>';
-    let studentList;
-    try {
-      studentList = JSON.parse(studentListJSON);
-    } catch (e) {
-      console.error('Error parsing studentListJSON:', e);
-      studentList = [];
-    }
-    console.log('studentList:', studentList);
-    let totalStudents = studentList.length;
-    document.getElementById('N').value = totalStudents;
+    let studentList = [];
+    let totalStudents = 0;
 
+    // Fetch student list and metadata on load
     window.onload = function() {
+      // Fetch student list
+      fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?timekeeper=true', {
+        method: 'GET'
+      })
+      .then(response => response.text())
+      .then(html => {
+        // Extract studentListJSON from the HTML response
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const scriptTags = doc.getElementsByTagName('script');
+        let studentListJSON = '[]';
+        for (let script of scriptTags) {
+          if (script.textContent.includes('studentListJSON')) {
+            const match = script.textContent.match(/let studentListJSON = '(.+?)';/);
+            if (match) {
+              studentListJSON = match[1].replace(/"/g, '"');
+              break;
+            }
+          }
+        }
+        try {
+          studentList = JSON.parse(studentListJSON);
+        } catch (e) {
+          console.error('Error parsing studentListJSON:', e);
+          studentList = [];
+        }
+        console.log('studentList:', studentList);
+        totalStudents = studentList.length;
+        document.getElementById('N').value = totalStudents;
+      })
+      .catch(err => console.error('Error fetching student list:', err));
+
+      // Fetch metadata
       fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=getWebAppMetadata', {
-  method: 'GET'
-})
-.then(response => response.text())
-.then(metadata => {
-  let metas = JSON.parse(metadata || '[]');
-  let circuits = new Set();
-  let maxStations = 0;
-  metas.filter(m => m.circuit && m.stationNumber).forEach(m => {
-    circuits.add(m.circuit);
-    maxStations = Math.max(maxStations, parseInt(m.stationNumber));
-  });
-  document.getElementById('C').value = circuits.size || 3;
-  document.getElementById('S').value = maxStations || 5;
-})
-.catch(err => console.error('Error fetching metadata:', err));
+        method: 'GET'
+      })
+      .then(response => response.text())
+      .then(metadata => {
+        let metas = JSON.parse(metadata || '[]');
+        let circuits = new Set();
+        let maxStations = 0;
+        metas.filter(m => m.circuit && m.stationNumber).forEach(m => {
+          circuits.add(m.circuit);
+          maxStations = Math.max(maxStations, parseInt(m.stationNumber));
+        });
+        document.getElementById('C').value = circuits.size || 3;
+        document.getElementById('S').value = maxStations || 5;
+      })
+      .catch(err => console.error('Error fetching metadata:', err));
 
       updateNextStudents(1);
     };
@@ -656,50 +681,47 @@
           document.getElementById('currentSlot').innerText = phaseText;
           document.body.className = currentPhase.type === 'station' ? 'station-phase' : 'transition-phase';
 
-            // Update server with timer state when in station phase (not during transitions)
-if (currentPhase.type === 'station') {
-  const stationTime = parseInt(document.getElementById('stationTime').value);
-  const timerState = {
-    phaseStartTime: phaseStartTime.getTime(),
-    phaseDuration: phaseDuration,
-    currentPhaseType: currentPhase.type,
-    currentRound: currentPhase.round,
-    currentStation: currentPhase.station,
-    stationLength: stationTime, // Add the station length from the TimeKeeper
-    source: 'timekeeper'
-  };
-  fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=setTimerState', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(timerState)
-})
-.then(response => response.json())
-.catch(err => console.error('Error setting timer state:', err));
-}
-
-
+          // Update server with timer state when in station phase (not during transitions)
+          if (currentPhase.type === 'station') {
+            const stationTime = parseInt(document.getElementById('stationTime').value);
+            const timerState = {
+              phaseStartTime: phaseStartTime.getTime(),
+              phaseDuration: phaseDuration,
+              currentPhaseType: currentPhase.type,
+              currentRound: currentPhase.round,
+              currentStation: currentPhase.station,
+              stationLength: stationTime, // Add the station length from the TimeKeeper
+              source: 'timekeeper'
+            };
+            fetch('https://script.google.com/macros/s/AKfycbweNars3SF0VUqWo8_I51OZFb-_agomMDTSQz6TOKw_AqRTrM9t_2Sf3VLPvcLRcrINYw/exec?method=setTimerState', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(timerState)
+            })
+            .then(response => response.json())
+            .catch(err => console.error('Error setting timer state:', err));
+          }
 
           if (currentPhase.type === 'station' && phaseRemaining <= 2 && phaseRemaining > 1.99 && !warningPlayed) {
-  document.getElementById('warning').innerText = 'Warning: Only 2 minutes remaining in the current station!';
-  if (Notification.permission === 'granted') {
-    new Notification('OSCE Time Keeper', {
-      body: '2 minutes remaining in Station ' + currentPhase.station,
-      icon: '/icon.png'
-    });
-  } else if (Notification.permission !== 'denied') {
-    Notification.requestPermission().then(permission => {
-      if (permission === 'granted') {
-        new Notification('OSCE Time Keeper', {
-          body: '2 minutes remaining in Station ' + currentPhase.station,
-          icon: '/icon.png'
-        });
-      }
-    });
-  }
-  warningPlayed = true;
-}
+            document.getElementById('warning').innerText = 'Warning: Only 2 minutes remaining in the current station!';
+            if (Notification.permission === 'granted') {
+              new Notification('OSCE Time Keeper', {
+                body: '2 minutes remaining in Station ' + currentPhase.station,
+                icon: '/icon.png'
+              });
+            } else if (Notification.permission !== 'denied') {
+              Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                  new Notification('OSCE Time Keeper', {
+                    body: '2 minutes remaining in Station ' + currentPhase.station,
+                    icon: '/icon.png'
+                  });
+                }
+              });
+            }
+            warningPlayed = true;
           } else if (phaseRemaining > 2) {
             document.getElementById('warning').innerText = '';
             warningPlayed = false;
@@ -709,14 +731,14 @@ if (currentPhase.type === 'station') {
           document.getElementById('currentSlot').innerText = `Round ${currentPhase.round}, ${currentPhase.type === 'station' ? `Station ${currentPhase.station}` : 'Transition'}: Time's up! Click 'Next Phase' to proceed.`;
           document.body.className = '';
           if (!zeroPlayed) {
-  if (Notification.permission === 'granted') {
-    new Notification('OSCE Time Keeper', {
-      body: 'Time is up for Station ' + currentPhase.station + '!',
-      icon: '/icon.png'
-    });
-  }
-  zeroPlayed = true;
-}
+            if (Notification.permission === 'granted') {
+              new Notification('OSCE Time Keeper', {
+                body: 'Time is up for Station ' + currentPhase.station + '!',
+                icon: '/icon.png'
+              });
+            }
+            zeroPlayed = true;
+          }
           phaseEnded = true;
         }
 
